@@ -20,55 +20,57 @@ class Deduper : CliktCommand() {
 
 //        println("Root Dir = $rootDir")
 
-        val pb = ProgressBar("Fingerprinting", 0)
+
         val dupesFound = mutableSetOf<Photo>()
 
-        fun collectDir(dir: File) {
+        ProgressBar("Fingerprinting", 0).use {pb ->
+
+            fun collectDir(dir: File) {
 
 //            println("Collecting Dir $dir...")
-            val collector = Collector()
+                val collector = Collector()
 
-            //process files first
-            val files = dir.listFiles(NonDirectoryFilter) ?: throw RuntimeException("Failed to list files in $dir")
+                //process files first
+                val files = dir.listFiles(NonDirectoryFilter) ?: throw RuntimeException("Failed to list files in $dir")
 
-            pb.maxHint(pb.max + files.size)
+                pb.maxHint(pb.max + files.size)
 
-            files.forEach {
-                when (allowOrIgnoreMedia(it)) {
-                    true -> collector.collect(it)
-                    false -> if(verbose) println("Ignoring $it")
-                    null -> println("!!! Discarding unknown file: $it")
+                files.forEach {
+                    when (allowOrIgnoreMedia(it)) {
+                        true -> collector.collect(it)
+                        false -> if (verbose) println("Ignoring $it")
+                        null -> println("!!! Discarding unknown file: $it")
+                    }
+                    pb.step()
+                }
+
+                //then recurse
+                dir.listFiles(DirectoryFilter)?.forEach {
+                    collectDir(it)
+                } ?: throw RuntimeException("Failed to list dirs in $dir")
+
+                dupesFound.addAll(collector.dupes)
+            }
+
+            collectDir(rootDir)
+
+        }
+
+        ProgressBar("Deleting", dupesFound.size.toLong()).use { pb ->
+
+            dupesFound.forEach {
+                pb.extraMessage = it.name
+                if (deleteDupes) {
+                    it.delete()
+                    if (verbose)
+                        println("Deleted ${it}")
+                } else {
+                    println("Not deleting ${it}")
                 }
                 pb.step()
             }
 
-            //then recurse
-            dir.listFiles(DirectoryFilter)?.forEach {
-                collectDir(it)
-            } ?: throw RuntimeException("Failed to list dirs in $dir")
-
-            dupesFound.addAll(collector.dupes)
         }
-
-        collectDir(rootDir)
-
-        pb.close()
-
-        val pbd = ProgressBar("Deleting", dupesFound.size.toLong())
-
-        dupesFound.forEach {
-            pbd.extraMessage = it.name
-            if (deleteDupes) {
-                it.delete()
-                if(verbose)
-                    println("Deleted ${it}")
-            } else {
-                println("Not deleting ${it}")
-            }
-            pbd.step()
-        }
-
-        pbd.close()
     }
 }
 
