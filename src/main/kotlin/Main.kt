@@ -3,6 +3,7 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.file
+import me.tongfei.progressbar.ProgressBar
 import java.io.File
 import java.io.FilenameFilter
 import java.util.*
@@ -16,22 +17,30 @@ class Deduper : CliktCommand() {
 
     override fun run() {
 
-        println("Root Dir = $rootDir")
+//        println("Root Dir = $rootDir")
 
+        val pb = ProgressBar("Fingerprinting", 0)
         val dupesFound = mutableSetOf<Photo>()
 
         fun collectDir(dir: File) {
 
-            println("Collecting Dir $dir...")
+//            println("Collecting Dir $dir...")
             val collector = Collector()
 
             //process files first
-            dir.listFiles(NonDirectoryFilter)?.forEach {
-                if (allowedMedia(it))
+            val files = dir.listFiles(NonDirectoryFilter) ?: throw RuntimeException("Failed to list files in $dir")
+
+            pb.maxHint(pb.max + files.size)
+
+            files.forEach {
+                if (allowedMedia(it)) {
                     collector.collect(it)
-                else
+                    pb.step()
+                } else {
                     println("!!! Discarding disallowed file: $it")
-            } ?: throw RuntimeException("Failed to list files in $dir")
+                    pb.step()
+                }
+            }
 
             //then recurse
             dir.listFiles(DirectoryFilter)?.forEach {
@@ -43,14 +52,21 @@ class Deduper : CliktCommand() {
 
         collectDir(rootDir)
 
+        pb.close()
+
+        val pbd = ProgressBar("Deleting", dupesFound.size.toLong())
+
         dupesFound.forEach {
-            if (deleteDupes) {
-                println("Deleting ${it}")
-                it.delete()
+            pbd.extraMessage = it.name
+            if (deleteDupes){
+              it.delete()
             } else {
                 println("Not deleting ${it}")
             }
+            pbd.step()
         }
+
+        pbd.close()
     }
 }
 
@@ -78,7 +94,7 @@ class Collector {
     val dupes = mutableSetOf<Photo>()
 
     fun collect(photo: Photo): CollectionResult {
-        println("Collecting File: $photo")
+//        println("Collecting File: $photo")
         fingerprint(photo)
         return false
     }
