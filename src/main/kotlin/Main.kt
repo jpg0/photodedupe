@@ -18,10 +18,10 @@ fun main(args: Array<String>) = Deduper().main(args)
 var verboseOutput = false
 
 fun verbose(s: String) {
-    if (verboseOutput) println("\n$s")
+    if (verboseOutput) println("$s\n")
 }
 
-fun log(s: String) = println("\n$s")
+fun log(s: String) = println("$s\n")
 
 class Deduper : CliktCommand() {
     val rootDir: File by option().file().required().validate { it.isDirectory }
@@ -138,7 +138,7 @@ class Deduper : CliktCommand() {
 }
 
 val ALLOWED_EXTS = arrayOf("jpg", "jpeg", "heic")
-val IGNORED_EXTS = arrayOf("mp4", "ds_store", "wav", "mov")
+val IGNORED_EXTS = arrayOf("mp4", "ds_store", "wav", "mov", "png", "avi")
 val IGNORED_PREFIX = "._"
 
 fun allowOrIgnoreMedia(file: File): Boolean? = file.extension.lowercase(Locale.getDefault()).let { ext ->
