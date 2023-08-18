@@ -9,6 +9,7 @@ import me.tongfei.progressbar.ProgressBarStyle
 import java.io.File
 import java.io.FilenameFilter
 import java.util.*
+import java.util.stream.Collectors
 
 
 fun main(args: Array<String>) = Deduper().main(args)
@@ -23,62 +24,78 @@ class Deduper : CliktCommand() {
 //        println("Root Dir = $rootDir")
 
 
-        val dupesFound = mutableSetOf<Photo>()
-
-        ProgressBarBuilder()
+        val dupesFound = ProgressBarBuilder()
             .setTaskName("Fingerprinting")
             .setInitialMax(0)
             .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
-            fun collectDir(dir: File) {
+                fun collectDir(dir: File): Set<Photo> {
+                    val dupes = mutableSetOf<Photo>()
 
 //            println("Collecting Dir $dir...")
-                val collector = Collector()
+                    val collector = Collector()
 
-                //process files first
-                val files = dir.listFiles(NonDirectoryFilter) ?: throw RuntimeException("Failed to list files in $dir")
+                    //process files
+                    val files =
+                        dir.listFiles(NonDirectoryFilter) ?: throw RuntimeException("Failed to list files in $dir")
 
-                pb.maxHint(pb.max + files.size)
+                    pb.maxHint(pb.max + files.size)
 
-                files.forEach {
-                    when (allowOrIgnoreMedia(it)) {
-                        true -> collector.collect(it)
-                        false -> if (verbose) println("Ignoring $it")
-                        null -> println("!!! Discarding unknown file: $it")
-                    }
-                    pb.step()
+                    //recurse
+                    val dirs = dir.listFiles(DirectoryFilter) ?: throw RuntimeException("Failed to list dirs in $dir")
+
+                    val dirDupes = dirs.asList().parallelStream().flatMap {
+                        collectDir(it).stream()
+                    }.collect(Collectors.toSet()).toSet()
+
+                    val fileDupes: Set<File> = files.asList().mapNotNull {
+                        val rv = when (allowOrIgnoreMedia(it)) {
+                            true -> {
+                                collector.collect(it)
+                                it
+                            }
+
+                            false -> {
+                                if (verbose) println("Ignoring $it")
+                                null
+                            }
+
+                            null -> {
+                                println("!!! Discarding unknown file: $it")
+                                null
+                            }
+                        }
+                        pb.step()
+                        return@mapNotNull rv
+                    }.toSet()
+                    
+                    return fileDupes + dirDupes
                 }
 
-                //then recurse
-                dir.listFiles(DirectoryFilter)?.forEach {
-                    collectDir(it)
-                } ?: throw RuntimeException("Failed to list dirs in $dir")
+                collectDir(rootDir)
 
-                dupesFound.addAll(collector.dupes)
             }
 
-            collectDir(rootDir)
 
-        }
 
         ProgressBarBuilder()
             .setTaskName("Deleting")
             .setInitialMax(dupesFound.size.toLong())
             .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
-            dupesFound.forEach {
-                pb.extraMessage = it.name
-                if (deleteDupes) {
-                    it.delete()
-                    if (verbose)
-                        println("Deleted ${it}")
-                } else {
-                    println("Not deleting ${it}")
+                dupesFound.forEach {
+                    pb.extraMessage = it.name
+                    if (deleteDupes) {
+                        it.delete()
+                        if (verbose)
+                            println("Deleted ${it}")
+                    } else {
+                        println("Not deleting ${it}")
+                    }
+                    pb.step()
                 }
-                pb.step()
-            }
 
-        }
+            }
     }
 }
 
