@@ -138,7 +138,7 @@ class Deduper : CliktCommand() {
 }
 
 val ALLOWED_EXTS = arrayOf("jpg", "jpeg")
-val IGNORED_EXTS = arrayOf("mp4", "ds_store")
+val IGNORED_EXTS = arrayOf("mp4", "ds_store", "wav")
 
 fun allowOrIgnoreMedia(file: File): Boolean? = file.extension.lowercase(Locale.getDefault()).let { ext ->
     return if (ALLOWED_EXTS.contains(ext)) {
@@ -177,7 +177,7 @@ class Collector {
         val metadata = try {
             ImageMetadataReader.readMetadata(photo)
         } catch (e: Exception) {
-            log("!!! Failed to read metadata for file $photo")
+            log("\n!!! Failed to read metadata for file $photo\n") //newlines to prevent overwriting by progress bar
             throw e
         }
 
