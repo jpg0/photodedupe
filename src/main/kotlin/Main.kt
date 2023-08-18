@@ -28,7 +28,7 @@ class Deduper : CliktCommand() {
     val deleteDupes: Boolean by option().boolean().default(false).help("Delete duplicates")
     val verbose: Boolean by option().flag(default = false).help("Verbose output")
     val threads: Int by option().int().default(1)
-    val dupesFile: File? by option().file().validate { !it.exists() }
+    val dupesFile: File? by option().file().validate { it.parentFile.isDirectory && !it.exists() }
 
     override fun run() {
 
