@@ -177,9 +177,7 @@ class Collector {
         val metadata = try {
             ImageMetadataReader.readMetadata(photo)
         } catch (e: Exception) {
-            log("\n!!! Failed to read metadata for file $photo\n") //newlines to prevent overwriting by progress bar
-            System.out.flush()
-            throw e
+            throw java.lang.RuntimeException("Failed to parse exif data for $photo", e)
         }
 
         val expectedUnique = arrayOf(Pair("Canon Makernote", "Image Unique ID"))
