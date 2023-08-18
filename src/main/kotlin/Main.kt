@@ -3,12 +3,13 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.file
-import me.tongfei.progressbar.ProgressBar
+import com.github.ajalt.clikt.parameters.types.int
 import me.tongfei.progressbar.ProgressBarBuilder
 import me.tongfei.progressbar.ProgressBarStyle
 import java.io.File
 import java.io.FilenameFilter
 import java.util.*
+import java.util.concurrent.ForkJoinPool
 import java.util.stream.Collectors
 
 
@@ -18,11 +19,14 @@ class Deduper : CliktCommand() {
     val rootDir: File by option().file().required().validate { it.isDirectory }
     val deleteDupes: Boolean by option().boolean().default(false).help("Delete duplicates")
     val verbose: Boolean by option().boolean().default(false).help("Verbose output")
+    val threads: Int by option().int().default(1)
 
     override fun run() {
 
 //        println("Root Dir = $rootDir")
 
+        val numTasks = threads
+        val pool = ForkJoinPool(numTasks)
 
         val dupesFound = ProgressBarBuilder()
             .setTaskName("Fingerprinting")
@@ -30,7 +34,6 @@ class Deduper : CliktCommand() {
             .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
                 fun collectDir(dir: File): Set<Photo> {
-                    val dupes = mutableSetOf<Photo>()
 
 //            println("Collecting Dir $dir...")
                     val collector = Collector()
@@ -44,31 +47,35 @@ class Deduper : CliktCommand() {
                     //recurse
                     val dirs = dir.listFiles(DirectoryFilter) ?: throw RuntimeException("Failed to list dirs in $dir")
 
-                    val dirDupes = dirs.asList().parallelStream().flatMap {
-                        collectDir(it).stream()
-                    }.collect(Collectors.toSet()).toSet()
+                    val dirDupes = pool.submit<Set<Photo>> {
+                        dirs.asList().parallelStream().flatMap {
+                            collectDir(it).stream()
+                        }.collect(Collectors.toSet()).toSet()
+                    }.get()
 
-                    val fileDupes: Set<File> = files.asList().mapNotNull {
-                        val rv = when (allowOrIgnoreMedia(it)) {
-                            true -> {
-                                collector.collect(it)
-                                it
-                            }
+                    val fileDupes: Set<File> = pool.submit<Set<Photo>> {
+                        files.asList().mapNotNull {
+                            val rv = when (allowOrIgnoreMedia(it)) {
+                                true -> {
+                                    collector.collect(it)
+                                    it
+                                }
 
-                            false -> {
-                                if (verbose) println("Ignoring $it")
-                                null
-                            }
+                                false -> {
+                                    if (verbose) println("Ignoring $it")
+                                    null
+                                }
 
-                            null -> {
-                                println("!!! Discarding unknown file: $it")
-                                null
+                                null -> {
+                                    println("!!! Discarding unknown file: $it")
+                                    null
+                                }
                             }
-                        }
-                        pb.step()
-                        return@mapNotNull rv
-                    }.toSet()
-                    
+                            pb.step()
+                            return@mapNotNull rv
+                        }.toSet()
+                    }.get()
+
                     return fileDupes + dirDupes
                 }
 
