@@ -14,6 +14,7 @@ fun main(args: Array<String>) = Deduper().main(args)
 class Deduper : CliktCommand() {
     val rootDir: File by option().file().required().validate { it.isDirectory }
     val deleteDupes: Boolean by option().boolean().default(false).help("Delete duplicates")
+    val verbose: Boolean by option().boolean().default(false).help("Verbose output")
 
     override fun run() {
 
@@ -33,13 +34,12 @@ class Deduper : CliktCommand() {
             pb.maxHint(pb.max + files.size)
 
             files.forEach {
-                if (allowedMedia(it)) {
-                    collector.collect(it)
-                    pb.step()
-                } else {
-                    println("!!! Discarding disallowed file: $it")
-                    pb.step()
+                when (allowOrIgnoreMedia(it)) {
+                    true -> collector.collect(it)
+                    false -> if(verbose) println("Ignoring $it")
+                    null -> println("!!! Discarding unknown file: $it")
                 }
+                pb.step()
             }
 
             //then recurse
@@ -58,8 +58,10 @@ class Deduper : CliktCommand() {
 
         dupesFound.forEach {
             pbd.extraMessage = it.name
-            if (deleteDupes){
-              it.delete()
+            if (deleteDupes) {
+                it.delete()
+                if(verbose)
+                    println("Deleted ${it}")
             } else {
                 println("Not deleting ${it}")
             }
@@ -70,7 +72,16 @@ class Deduper : CliktCommand() {
     }
 }
 
-fun allowedMedia(file: File): Boolean = arrayOf("jpg", "jpeg").contains(file.extension.lowercase(Locale.getDefault()))
+val ALLOWED_EXTS = arrayOf("jpg", "jpeg")
+val IGNORED_EXTS = arrayOf("mp4", "ds_store")
+
+fun allowOrIgnoreMedia(file: File): Boolean? = file.extension.lowercase(Locale.getDefault()).let { ext ->
+    return if (ALLOWED_EXTS.contains(ext)) {
+        true
+    } else if (IGNORED_EXTS.contains(ext)) {
+        false
+    } else null
+}
 
 object DirectoryFilter : FilenameFilter {
     override fun accept(dir: File?, name: String?) = isDirectory(dir, name)
