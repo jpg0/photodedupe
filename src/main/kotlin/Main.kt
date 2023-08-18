@@ -178,6 +178,7 @@ class Collector {
             ImageMetadataReader.readMetadata(photo)
         } catch (e: Exception) {
             log("\n!!! Failed to read metadata for file $photo\n") //newlines to prevent overwriting by progress bar
+            System.out.flush()
             throw e
         }
 
