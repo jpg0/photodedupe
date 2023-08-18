@@ -15,16 +15,26 @@ import java.util.stream.Collectors
 
 fun main(args: Array<String>) = Deduper().main(args)
 
+var verboseOutput = false
+
+fun verbose(s: String) {
+    if (verboseOutput) println(s)
+}
+
+fun log(s: String) = println(s)
+
 class Deduper : CliktCommand() {
     val rootDir: File by option().file().required().validate { it.isDirectory }
     val deleteDupes: Boolean by option().boolean().default(false).help("Delete duplicates")
-    val verbose: Boolean by option().boolean().default(false).help("Verbose output")
+    val verbose: Boolean by option().flag(default = false).help("Verbose output")
     val threads: Int by option().int().default(1)
+    val dupesFile: File? by option().file().validate { !it.exists() }
 
     override fun run() {
 
 //        println("Root Dir = $rootDir")
 
+        verboseOutput = this.verbose
         val numTasks = threads
         val pool = ForkJoinPool(numTasks)
 
@@ -34,9 +44,6 @@ class Deduper : CliktCommand() {
             .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
                 fun collectDir(dir: File): Set<Photo> {
-
-//            println("Collecting Dir $dir...")
-                    val collector = Collector()
 
                     //process files
                     val files =
@@ -54,20 +61,25 @@ class Deduper : CliktCommand() {
                     }.get()
 
                     val fileDupes: Set<File> = pool.submit<Set<Photo>> {
+
+                        val collector = Collector()
+
                         files.asList().mapNotNull {
                             val rv = when (allowOrIgnoreMedia(it)) {
                                 true -> {
-                                    collector.collect(it)
-                                    it
+                                    if(collector.collect(it))
+                                        it
+                                    else
+                                        null
                                 }
 
                                 false -> {
-                                    if (verbose) println("Ignoring $it")
+                                    verbose("Ignoring $it")
                                     null
                                 }
 
                                 null -> {
-                                    println("!!! Discarding unknown file: $it")
+                                    log("!!! Discarding unknown file: $it")
                                     null
                                 }
                             }
@@ -83,26 +95,45 @@ class Deduper : CliktCommand() {
 
             }
 
+        if (dupesFound.size == 0) {
+            log("No Dupes Found!")
+        } else {
 
+            log("${dupesFound.size} duplicates found!")
 
-        ProgressBarBuilder()
-            .setTaskName("Deleting")
-            .setInitialMax(dupesFound.size.toLong())
-            .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
+            if (deleteDupes) {
+                ProgressBarBuilder()
+                    .setTaskName("Deleting")
+                    .setInitialMax(dupesFound.size.toLong())
+                    .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
-                dupesFound.forEach {
-                    pb.extraMessage = it.name
-                    if (deleteDupes) {
-                        it.delete()
-                        if (verbose)
-                            println("Deleted ${it}")
-                    } else {
-                        println("Not deleting ${it}")
+                        dupesFound.forEach {
+                            pb.extraMessage = it.name
+                            it.delete()
+                            pb.step()
+                        }
+
                     }
-                    pb.step()
-                }
-
             }
+
+            if (dupesFile != null) {
+                ProgressBarBuilder()
+                    .setTaskName("Writing File")
+                    .setInitialMax(dupesFound.size.toLong())
+                    .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
+
+                        dupesFile!!.bufferedWriter().use { out ->
+                            dupesFound.forEach {
+                                pb.extraMessage = it.name
+                                out.write(it.absolutePath)
+                                out.newLine()
+                                pb.step()
+                            }
+                        }
+                    }
+            }
+
+        }
     }
 }
 
@@ -140,32 +171,40 @@ class Collector {
 
     fun collect(photo: Photo): CollectionResult {
 //        println("Collecting File: $photo")
-        fingerprint(photo)
-        return false
+        return fingerprint(photo)
     }
 
-    fun fingerprint(photo: Photo) {
+    fun fingerprint(photo: Photo): Boolean {
         val metadata = ImageMetadataReader.readMetadata(photo)
 
         val expectedUnique = arrayOf(Pair("Canon Makernote", "Image Unique ID"))
+
+        var dupe = false
 
         for (directory in metadata.directories) {
             for (tag in directory.tags) {
                 for (expected in expectedUnique) {
                     if (expected.first == directory.name && expected.second == tag.tagName) {
-                        addFingerprint(expected.toString(), tag.description, photo)
+                        if (addFingerprint(expected.toString(), tag.description, photo))
+                            dupe = true
                     }
                 }
             }
         }
+
+        return dupe
     }
 
-    fun addFingerprint(type: String, fingerprint: Fingerprint, photo: Photo) {
+    fun addFingerprint(type: String, fingerprint: Fingerprint, photo: Photo) : Boolean {
         val existing = fingerprints.put("$type:$fingerprint", photo)
 
         if (existing != null) {
+            verbose("> $existing is a dupe of $photo")
             dupes.add(photo)
+            return true
         }
+
+        return false
     }
 
     fun getDupes(): Collection<Photo> = dupes
