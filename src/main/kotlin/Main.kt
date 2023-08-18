@@ -24,11 +24,11 @@ fun verbose(s: String) {
 fun log(s: String) = println("$s\n")
 
 class Deduper : CliktCommand() {
-    val rootDir: File by option().file().required().validate { it.isDirectory }
+    val rootDir: File by option().file().required().validate { require(it.isDirectory) }
     val deleteDupes: Boolean by option().boolean().default(false).help("Delete duplicates")
     val verbose: Boolean by option().flag(default = false).help("Verbose output")
     val threads: Int by option().int().default(1)
-    val dupesFile: File? by option().file().validate { it.parentFile.isDirectory && !it.exists() }
+    val dupesFile: File? by option().file().validate { require(it.parentFile.isDirectory && !it.exists()) }
 
     override fun run() {
 
