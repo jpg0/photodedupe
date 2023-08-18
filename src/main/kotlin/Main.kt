@@ -170,12 +170,16 @@ class Collector {
     val dupes = mutableSetOf<Photo>()
 
     fun collect(photo: Photo): CollectionResult {
-//        println("Collecting File: $photo")
         return fingerprint(photo)
     }
 
     fun fingerprint(photo: Photo): Boolean {
-        val metadata = ImageMetadataReader.readMetadata(photo)
+        val metadata = try {
+            ImageMetadataReader.readMetadata(photo)
+        } catch (e: Exception) {
+            log("!!! Failed to read metadata for file $photo")
+            throw e
+        }
 
         val expectedUnique = arrayOf(Pair("Canon Makernote", "Image Unique ID"))
 
