@@ -4,6 +4,8 @@ import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.file
 import me.tongfei.progressbar.ProgressBar
+import me.tongfei.progressbar.ProgressBarBuilder
+import me.tongfei.progressbar.ProgressBarStyle
 import java.io.File
 import java.io.FilenameFilter
 import java.util.*
@@ -23,7 +25,10 @@ class Deduper : CliktCommand() {
 
         val dupesFound = mutableSetOf<Photo>()
 
-        ProgressBar("Fingerprinting", 0).use {pb ->
+        ProgressBarBuilder()
+            .setTaskName("Fingerprinting")
+            .setInitialMax(0)
+            .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
             fun collectDir(dir: File) {
 
@@ -56,7 +61,10 @@ class Deduper : CliktCommand() {
 
         }
 
-        ProgressBar("Deleting", dupesFound.size.toLong()).use { pb ->
+        ProgressBarBuilder()
+            .setTaskName("Deleting")
+            .setInitialMax(dupesFound.size.toLong())
+            .setStyle(ProgressBarStyle.ASCII).build().use { pb ->
 
             dupesFound.forEach {
                 pb.extraMessage = it.name
