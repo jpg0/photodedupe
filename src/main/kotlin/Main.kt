@@ -139,11 +139,14 @@ class Deduper : CliktCommand() {
 
 val ALLOWED_EXTS = arrayOf("jpg", "jpeg")
 val IGNORED_EXTS = arrayOf("mp4", "ds_store", "wav")
+val IGNORED_PREFIX = "._"
 
 fun allowOrIgnoreMedia(file: File): Boolean? = file.extension.lowercase(Locale.getDefault()).let { ext ->
     return if (ALLOWED_EXTS.contains(ext)) {
         true
     } else if (IGNORED_EXTS.contains(ext)) {
+        false
+    } else if (file.name.startsWith(IGNORED_PREFIX)) {
         false
     } else null
 }
